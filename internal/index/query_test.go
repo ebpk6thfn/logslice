@@ -5,73 +5,97 @@ import (
 	"time"
 )
 
-func makeEntries() []Entry {
-	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	return []Entry{
-		{Offset: 0, Timestamp: base, Line: 1},
-		{Offset: 100, Timestamp: base.Add(1 * time.Minute), Line: 5},
-		{Offset: 250, Timestamp: base.Add(2 * time.Minute), Line: 10},
-		{Offset: 400, Timestamp: base.Add(3 * time.Minute), Line: 15},
+func makeEntries(timestamps ...string) []Entry {
+	entries := make([]Entry, len(timestamps))
+	for i, ts := range timestamps {
+		t, err := time.Parse(time.RFC3339, ts)
+		if err != nil {
+			panic(err)
+		}
+		entries[i] = Entry{Offset: int64(i * 100), Timestamp: t}
 	}
+	return entries
 }
 
 func TestIndex_Len(t *testing.T) {
-	idx := newIndex(makeEntries())
-	if idx.Len() != 4 {
-		t.Fatalf("expected 4, got %d", idx.Len())
+	ix := newIndex(makeEntries(
+		"2024-01-01T00:00:00Z",
+		"2024-01-01T01:00:00Z",
+	))
+	if got := ix.Len(); got != 2 {
+		t.Fatalf("Len() = %d, want 2", got)
 	}
 }
 
 func TestIndex_FindStart_Exact(t *testing.T) {
-	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	idx := newIndex(makeEntries())
-	offset := idx.FindStart(base.Add(1 * time.Minute))
-	if offset != 100 {
-		t.Fatalf("expected 100, got %d", offset)
+	ix := newIndex(makeEntries(
+		"2024-01-01T00:00:00Z",
+		"2024-01-01T01:00:00Z",
+		"2024-01-01T02:00:00Z",
+	))
+	target, _ := time.Parse(time.RFC3339, "2024-01-01T01:00:00Z")
+	got := ix.FindStart(target)
+	if got != 100 {
+		t.Fatalf("FindStart exact = %d, want 100", got)
 	}
 }
 
 func TestIndex_FindStart_BeforeAll(t *testing.T) {
-	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	idx := newIndex(makeEntries())
-	offset := idx.FindStart(base.Add(-5 * time.Minute))
-	if offset != 0 {
-		t.Fatalf("expected 0, got %d", offset)
+	ix := newIndex(makeEntries(
+		"2024-01-01T01:00:00Z",
+		"2024-01-01T02:00:00Z",
+	))
+	target, _ := time.Parse(time.RFC3339, "2024-01-01T00:00:00Z")
+	got := ix.FindStart(target)
+	if got != 0 {
+		t.Fatalf("FindStart before all = %d, want 0", got)
 	}
 }
 
 func TestIndex_FindStart_AfterAll(t *testing.T) {
-	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	idx := newIndex(makeEntries())
-	offset := idx.FindStart(base.Add(10 * time.Minute))
-	if offset != -1 {
-		t.Fatalf("expected -1, got %d", offset)
+	ix := newIndex(makeEntries(
+		"2024-01-01T00:00:00Z",
+		"2024-01-01T01:00:00Z",
+	))
+	target, _ := time.Parse(time.RFC3339, "2024-01-01T03:00:00Z")
+	got := ix.FindStart(target)
+	if got != -1 {
+		t.Fatalf("FindStart after all = %d, want -1", got)
 	}
 }
 
-func TestIndex_FindEnd_Middle(t *testing.T) {
-	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	idx := newIndex(makeEntries())
-	offset := idx.FindEnd(base.Add(1 * time.Minute))
-	if offset != 250 {
-		t.Fatalf("expected 250, got %d", offset)
+func TestIndex_FindEnd_Exclusive(t *testing.T) {
+	ix := newIndex(makeEntries(
+		"2024-01-01T00:00:00Z",
+		"2024-01-01T01:00:00Z",
+		"2024-01-01T02:00:00Z",
+	))
+	target, _ := time.Parse(time.RFC3339, "2024-01-01T01:00:00Z")
+	got := ix.FindEnd(target)
+	if got != 200 {
+		t.Fatalf("FindEnd exclusive = %d, want 200", got)
 	}
 }
 
 func TestIndex_FindEnd_AfterAll(t *testing.T) {
-	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
-	idx := newIndex(makeEntries())
-	offset := idx.FindEnd(base.Add(10 * time.Minute))
-	if offset != -1 {
-		t.Fatalf("expected -1 (read to EOF), got %d", offset)
+	ix := newIndex(makeEntries(
+		"2024-01-01T00:00:00Z",
+		"2024-01-01T01:00:00Z",
+	))
+	target, _ := time.Parse(time.RFC3339, "2024-01-01T05:00:00Z")
+	got := ix.FindEnd(target)
+	if got != -1 {
+		t.Fatalf("FindEnd after all = %d, want -1", got)
 	}
 }
 
 func TestIndex_Entries_ReturnsCopy(t *testing.T) {
-	idx := newIndex(makeEntries())
-	e := idx.Entries()
+	ix := newIndex(makeEntries(
+		"2024-01-01T00:00:00Z",
+	))
+	e := ix.Entries()
 	e[0].Offset = 9999
-	if idx.entries[0].Offset == 9999 {
-		t.Fatal("Entries() should return a copy, not a reference")
+	if ix.entries[0].Offset == 9999 {
+		t.Fatal("Entries() returned a reference to internal slice")
 	}
 }
