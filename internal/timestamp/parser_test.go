@@ -67,3 +67,13 @@ func TestMustParse_Panics(t *testing.T) {
 	}()
 	timestamp.MustParse("bad input", "")
 }
+
+// TestParse_ExplicitFormat_WrongFormat verifies that providing an explicit
+// format that does not match the input string returns an error rather than
+// silently falling back to auto-detection.
+func TestParse_ExplicitFormat_WrongFormat(t *testing.T) {
+	_, _, err := timestamp.Parse("2024-03-15 10:22:33", time.RFC3339)
+	if err == nil {
+		t.Fatal("expected error when explicit format does not match input, got nil")
+	}
+}
